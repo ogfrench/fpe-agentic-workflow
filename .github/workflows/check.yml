@@ -35,7 +35,18 @@ jobs:
           sha256sum dist/agentic-workflow-chatgpt-v*.zip
       - name: Scan generated artifacts for credentials before distribution
         run: |
-          docker run --rm --network none --mount "type=bind,source=$PWD/dist,target=/scan,readonly" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir --redact=100 --max-archive-depth=3 --ignore-gitleaks-allow --no-banner /scan
+          report="$(mktemp -d)"
+          trap 'rm -rf "$report"' EXIT
+          status=0
+          docker run --rm --network none --mount "type=bind,source=$PWD/dist,target=/scan,readonly" --mount "type=bind,source=$report,target=/report" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir --redact=100 --max-archive-depth=3 --ignore-gitleaks-allow --no-banner --report-format json --report-path /report/findings.json /scan || status=$?
+          if [ -f "$report/findings.json" ]; then
+            python3 - "$report/findings.json" <<'PY'
+            import json, sys
+            for finding in json.load(open(sys.argv[1])) or []:
+                print(f"{finding['RuleID']}: {finding['File']}:{finding['StartLine']}")
+            PY
+          fi
+          exit "$status"
       - name: Retain private ChatGPT plugin candidate for host installation
         uses: actions/upload-artifact@v7
         with:
@@ -113,7 +124,18 @@ jobs:
           (cd dist && sha256sum -c SHA256SUMS-claude.txt)
       - name: Scan generated artifacts for credentials before distribution
         run: |
-          docker run --rm --network none --mount "type=bind,source=$PWD/dist,target=/scan,readonly" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir --redact=100 --max-archive-depth=3 --ignore-gitleaks-allow --no-banner /scan
+          report="$(mktemp -d)"
+          trap 'rm -rf "$report"' EXIT
+          status=0
+          docker run --rm --network none --mount "type=bind,source=$PWD/dist,target=/scan,readonly" --mount "type=bind,source=$report,target=/report" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir --redact=100 --max-archive-depth=3 --ignore-gitleaks-allow --no-banner --report-format json --report-path /report/findings.json /scan || status=$?
+          if [ -f "$report/findings.json" ]; then
+            python3 - "$report/findings.json" <<'PY'
+            import json, sys
+            for finding in json.load(open(sys.argv[1])) or []:
+                print(f"{finding['RuleID']}: {finding['File']}:{finding['StartLine']}")
+            PY
+          fi
+          exit "$status"
       - name: Retain reviewed Claude candidate until release
         uses: actions/upload-artifact@v7
         with:
